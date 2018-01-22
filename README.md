@@ -12,6 +12,7 @@ BD<-readOGR(dsn=".", layer="BD")
 
 
 ###cargando variables ambientales
+
 files <- list.files(path=".", pattern='tif', full.names=TRUE )
 
 View(files)
@@ -26,6 +27,7 @@ plot(BD, pch=18, add=TRUE, col="blue", main="Batrachochytrium dendrobatidis")
 plot(predictors)
 
 #Extraer la informacion de variables ambientales por ptos. con presencia de BD
+
 head(BD)
 BD <- BD[,-1] # quito la primera columna
 head(BD)
@@ -36,6 +38,7 @@ head(BD)
 presvals <- (BD)
 
 ###presvals <- extract(predictors, BD)
+
 set.seed(2000)
 backg <- randomPoints(predictors, n=500, extf = 1.25)
 
