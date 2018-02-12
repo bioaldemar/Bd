@@ -1,12 +1,15 @@
 ---
 title: "BD N de Sant. GLM"
 author: "Acevedo, et.al.,"
-date: "23 de enero de 2018"
+date: "6 de febrero de 2018"
 output: html_document
+df_print: paged
+editor_options:
+  chunk_output_type: console
 ---
 ## BD 
 ## Read packages
-```{r setup, include=TRUE}
+```{r setup, include=TRUE, warning=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
 library(sp)
@@ -16,6 +19,14 @@ library(rgdal)
 library(dismo)
 library(rasterVis)
 library(xtable)
+library(sf)
+library(mapview)
+library(corrgram)
+library (corrplot) # correlations
+library(lme4)
+library(nlme)
+# library(arm)
+library(sjPlot)
 
 ```
 
@@ -25,20 +36,95 @@ library(xtable)
 ```{r data1}
 # Path to working directory
 path <- "C:/Users/diego.lizcano/Documents/GitHub/Bd_N_Santander/data"
+shp <- "C:/Users/diego.lizcano/Documents/GitHub/Bd_N_Santander/shp"
+bio <- "C:/Users/diego.lizcano/Documents/GitHub/Bd_N_Santander/bio"
 
-BD1<-readOGR(dsn=path, layer="BD")
+BD4<-readOGR(dsn=shp, layer="Bd4")
+
+# define geo coords and put to SpatialPointDataFrames
+crs.geo <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")  # geographical, datum WGS84
+proj4string(BD4) <- crs.geo  # define projection system of our data
+
+BD <- st_as_sf(BD4) # Convert foreign object to an sf object
+
+pos <-  grep(" ", BD$Species)
+keep <-  substr(pos, 1, pos-1)
+
+BD$genus <- 
 
 ###cargando variables ambientales
-files <- list.files(path=path, pattern='tif', full.names=TRUE )
+files <- list.files(path=bio, pattern='tif', full.names=TRUE )
 
 # View(files)
 # Agrupar las variables ambientales en un objeto stack
 predictors <- stack(files)
-# names(predictors)
-plot(predictors$Bio1)
-plot(BD1, pch=18, add=TRUE, col="blue", main="Batrachochytrium dendrobatidis")
+### clac  slope aspect
+slope_aspect <- terrain(predictors$DEM30, opt = c("slope", "aspect"), unit = "degrees")
 
-levelplot(predictors)
+predictors <- addLayer(predictors, slope_aspect)
+
+# names(predictors)
+# plot(predictors$Bio1)
+# plot(BD1, pch=18, add=TRUE, col="blue", main="Batrachochytrium dendrobatidis")
+
+mapview(BD, zcol = "Diagnostic", legend = TRUE, map.types = c("Esri.WorldShadedRelief", "Esri.WorldImagery"), color = "grey40")
+
+# plot(BD["Diagnostic"], add=T)
+# levelplot(predictors)
+
+### correlation 
+jnk=layerStats(predictors, 'pearson', na.rm=T)
+corr_matrix=jnk$'pearson correlation coefficient'
+
+
+# corrgram(corr_matrix, order=NULL, lower.panel=panel.shade,
+#  upper.panel=NULL, text.panel=panel.txt,
+#  main="Car")
+
+##### correlation plot
+# corrplot(corr_matrix, order = "FPC",type = "lower",  tl.cex = 0.8) # tl.pos = "lower",
+
+####### function to add significance 
+# mat : is a matrix of data
+# ... : further arguments to pass to the native R cor.test function
+cor.mtest <- function(mat, ...) {
+    mat <- as.matrix(mat)
+    n <- ncol(mat)
+    p.mat<- matrix(NA, n, n)
+    diag(p.mat) <- 0
+    for (i in 1:(n - 1)) {
+        for (j in (i + 1):n) {
+            tmp <- cor.test(mat[, i], mat[, j], ...)
+            p.mat[i, j] <- p.mat[j, i] <- tmp$p.value
+        }
+    }
+  colnames(p.mat) <- rownames(p.mat) <- colnames(mat)
+  p.mat
+}
+
+# matrix of the p-value of the correlation
+# use the function
+p.mat <- cor.mtest(predictors)
+# head(p.mat[, 1:5])
+
+##### correlation plot 
+# Leave blank on no significant coefficient
+corrplot(corr_matrix, p.mat = p.mat, sig.level = 0.05,  order="FPC", type = "lower",  tl.cex = 0.8) # tl.pos = "lower",
+
+## remove correlated layesr
+predictors2 <- dropLayer(predictors, c(1,2,3,15,18,19))
+
+### correlation 
+jnk=layerStats(predictors2, 'pearson', na.rm=T)
+corr_matrix=jnk$'pearson correlation coefficient'
+
+
+# matrix of the p-value of the correlation
+p.mat <- cor.mtest(predictors2)
+
+corrplot(corr_matrix, p.mat = p.mat, sig.level = 0.05,  order="FPC", type = "lower",  tl.cex = 0.8) # tl.pos = "lower",
+
+
 ```
 
 
@@ -47,89 +133,118 @@ levelplot(predictors)
 
 #Extraer la informacion de variables ambientales por ptos. con presencia de BD
 
+# # head(BD)
+# BD <- BD1[,-1] # quito la primera columna
 # head(BD)
-BD <- BD1[,-1] # quito la primera columna
-head(BD)
-names(BD)[1]<-paste("x")
-names(BD)[2]<-paste("y") # re nombro encabezados de  columnas
-# head(BD)
+# names(BD)[1]<-paste("x")
+# names(BD)[2]<-paste("y") # re nombro encabezados de  columnas
+# # head(BD)
+# 
+# presvals <- (BD)
+positive <- BD %>% dplyr::filter (Diagnostic==1)
+negative <- BD %>% dplyr::filter (Diagnostic==0)
 
-presvals <- (BD)
+presvals <- extract(scale(predictors2, center=TRUE, scale=TRUE), positive)
+ausvals <- extract(scale(predictors2, center=TRUE, scale=TRUE), negative)
 
-###presvals <- extract(predictors, BD)
 
+# 
 set.seed(2000)
-backg <- randomPoints(predictors, n=500, extf = 1.25)
+# backg <- randomPoints(predictors, n=500, extf = 1.25)
 
 
-plot(predictors$DEM30)
-points(backg, pch=18, col="red")
-plot(BD1, pch=18, add=TRUE, col="blue", main="Batrachochytrium dendrobatidis")
-
+# plot(predictors2$DEM30)
+# plot(BD["Diagnostic"], add=T)
+# plot(BD, pch=18, add=TRUE, col="blue", main="Batrachochytrium dendrobatidis")
+# 
 
 #generando datos de prueba y entrenamiento con los datos de presencia y pseudo-ausencia con particion 80-20%
-indexes_pres = sample(1:nrow(presvals), size=0.2*nrow(presvals))
-indexes_backg = sample(1:nrow(backg), size=0.2*nrow(backg))
+indexes_pres = sample(1:nrow(presvals), size=0.25*nrow(presvals))
+indexes_backg = sample(1:nrow(ausvals), size=0.25*nrow(ausvals))
 
 ###Presencias
 #identifica el 20% de los datos como datos prueba/test
-pres_test = presvals[indexes_pres,]
+pres_test = as.data.frame(presvals[indexes_pres,])
 dim(pres_test)
 #identifica el 80% de los datos como datos entrenamiento/train
-pres_train = presvals[-indexes_pres,]
+pres_train = as.data.frame(presvals[-indexes_pres,])
 dim(pres_train)
 
+# species
+pres_train$species <- positive$Species[-indexes_pres]
+pres_test$species <- positive$Species[indexes_pres]
 # View(pres_train)
 
 
-###pseudo-ausencia
+###ausencia
 #identifica el 20% de los datos como datos prueba/test
-backg_test = backg[indexes_backg,]
+backg_test = as.data.frame(ausvals[indexes_backg,])
 dim(backg_test)
 #identifica el 80% de los datos como datos entrenamiento/train
-backg_train = backg[-indexes_backg,]
+backg_train = as.data.frame(ausvals[-indexes_backg,])
 dim(backg_train)
 
-
-# mapeando los datos de entrenamiento y prueba de presencias y backg
-r = raster(predictors, 1)
-plot(!is.na(r), col=c('white', 'light grey'), legend=FALSE, main="datos de entrenamiento y prueba ")
-points(backg_train, pch='-', cex=0.5, col='red')
-points(backg_test, pch='-', cex=0.5, col='black')
-points(pres_train, pch= '+', col='green')
-points(pres_test, pch='+', col='blue')
+# species
+# View(pres_train)
+backg_train$species <- negative$Species[-indexes_backg]
+backg_test$species <- negative$Species[indexes_backg]
 
 
-trainpres <- data.frame( extract(predictors, pres_train) )
-trainbackg <- data.frame( extract(predictors, backg_train) )
+# mapeando los datos de entrenamiento y prueba de presencias y ausvals
+# r = raster(predictors2, 1)
+# plot(!is.na(r), col=c('white', 'light grey'), legend=FALSE, main="datos de entrenamiento y prueba ")
+# points(backg_train, pch='-', cex=0.5, col='red')
+# points(backg_test, pch='-', cex=0.5, col='black')
+# points(pres_train, pch= '+', col='green')
+# points(pres_test, pch='+', col='blue')
+# 
+
+trainpres <- as.data.frame(pres_train)# data.frame( extract(predictors2, pres_train) )
+trainbackg <- as.data.frame(backg_train)# data.frame( extract(predictors2, backg_train) )
 train <- rbind(trainpres, trainbackg)
 pb_train <- c(rep(1, nrow(trainpres)), rep(0, nrow(trainbackg)))
 envtrain <- data.frame( cbind(pa=pb_train, train) )
 
 
 #### extract from stack
-testpres <- data.frame( extract(predictors, pres_test) )
-testbackg <- data.frame( extract(predictors, backg_test) )
+testpres <- as.data.frame(pres_test)# data.frame( extract(predictors2, pres_test) )
+testbackg <- as.data.frame(backg_test)# data.frame( extract(predictors2, backg_test) )
 
 # head(envtrain)
 
 
 #Ajuste del modelo GLM y predicc??n 
 # GLM binomial 
-gm1 <- glm(pa ~ Bio1 + Bio2 + Bio3 + Bio4 + Bio5 + Bio6 + Bio7 + Bio8 + Bio9 + Bio10 + Bio11 + Bio12 + Bio13 + Bio14 + Bio15 + Bio16 + Bio17 + Bio18 + Bio19 + DEM30,family = binomial(link = "logit"), data=envtrain)
-summary(gm1)
-coef(gm1)
+glm1 <- glm(pa ~ Bio12 +  Bio13 + Bio14 + Bio15 +
+            Bio16 + Bio17 + Bio18 + Bio19 + Bio2 +  
+            Bio3 + Bio4 + Bio6 + Bio7 + 
+            DEM30 + slope + aspect,
+           family = binomial(link = "logit"), data=envtrain)
+summary(glm1)
+coef(glm1)
 
-# GLM gausiano 
-gm2 <- glm(pa ~ Bio1 + Bio2 + Bio3 + Bio4 + Bio5 + Bio6 + Bio7 + Bio8 + Bio9 + Bio10 + Bio11 + Bio12 + Bio13 + Bio14 + Bio15 + Bio16 + Bio17 + Bio18 + Bio19 + DEM30,family = gaussian(link = "identity"), data=envtrain)
-summary(gm2)
-coef(gm2)
+
+# Stepwise Regression
+library(MASS)
+step <- stepAIC(glm1, direction="backward", k = 2)
+step$anova # display results
+
+glm2 <- glm(pa ~ Bio12 + Bio13 + Bio14 + Bio15 + Bio19 + Bio2 + Bio6,
+            family = binomial(link = "logit"), data=envtrain)
+
+
+#### multiple group effects with multiple group effect terms factor species.
+mod_lmer1 <- lmer(pa ~ Bio12 + Bio13 + Bio14 + Bio15 + Bio19 + Bio2 + Bio6 +
+                    (1|species), data=envtrain)
+
+
+
 
 ## evaluacion
-ge1 <- evaluate(testpres, testbackg, gm1)
+ge1 <- evaluate(testpres, testbackg, glm1)
 ge1
 
-ge2 <- evaluate(testpres, testbackg, gm2)
+ge2 <- evaluate(testpres, testbackg, mod_lmer1)
 ge2
 
 par(mfrow=c(1,2))
