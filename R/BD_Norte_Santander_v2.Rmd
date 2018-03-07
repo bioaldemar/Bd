@@ -1,7 +1,7 @@
 ---
 title: "BD N de Sant. GLM"
 author: "Acevedo, et.al.,"
-date: "6 de febrero de 2018"
+date: "5 de marzo de 2018"
 output: html_document
 df_print: paged
 editor_options:
@@ -36,10 +36,10 @@ library(sjPlot)
 ```{r data1}
 # Path to working directory
 path <- "C:/Users/diego.lizcano/Documents/GitHub/Bd_N_Santander/data"
-shp <- "C:/Users/diego.lizcano/Documents/GitHub/Bd_N_Santander/shp"
-bio <- "C:/Users/diego.lizcano/Documents/GitHub/Bd_N_Santander/bio"
+shp <- "C:/Users/diego.lizcano/Documents/GitHub/Bd_N_Santander/Data2"
+bio <- "C:/Users/diego.lizcano/Documents/GitHub/Bd_N_Santander/Capas2"
 
-BD4<-readOGR(dsn=shp, layer="Bd4")
+BD4<-readOGR(dsn=shp, layer="Bd_generos1")
 
 # define geo coords and put to SpatialPointDataFrames
 crs.geo <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")  # geographical, datum WGS84
@@ -144,11 +144,18 @@ names(predictors2)
 # # head(BD)
 # 
 # presvals <- (BD)
-positive <- BD %>% dplyr::filter (Diagnostic==1)
-negative <- BD %>% dplyr::filter (Diagnostic==0)
+positive <- BD %>% dplyr::filter (Diagnostic==1) # %>% as.data.frame()
+negative <- BD %>% dplyr::filter (Diagnostic==0) # %>% as.data.frame()
 
-presvals <- extract(scale(predictors2, center=TRUE, scale=TRUE), positive)
-ausvals <- extract(scale(predictors2, center=TRUE, scale=TRUE), negative)
+presvals <- as.data.frame(extract(scale(predictors2, center=TRUE, scale=TRUE), 
+                    as(positive, "Spatial")))
+ausvals <- as.data.frame(extract(scale(predictors2, center=TRUE, scale=TRUE), 
+                   as(negative, "Spatial")))
+
+###### genus adding 
+presvals$genus <- positive$Genero
+ausvals$genus  <- negative$Genero
+
 
 
 # 
@@ -174,8 +181,8 @@ pres_train = as.data.frame(presvals[-indexes_pres,])
 dim(pres_train)
 
 # species
-pres_train$species <- positive$Species[-indexes_pres]
-pres_test$species <- positive$Species[indexes_pres]
+# pres_train$species <- positive$Species[-indexes_pres]
+# pres_test$species <- positive$Species[indexes_pres]
 # View(pres_train)
 
 
@@ -237,14 +244,20 @@ step$anova # display results
 ## now only covars from Final Model glm1
 ##########################################
 
-glm2 <- glm(pa ~ Bio12 + Bio13 + Bio14 + Bio15 + Bio19 + Bio2 + Bio6,
+glm2 <- glm(pa ~ Bio12 + Bio13 + Bio14 + Bio17 + Bio19 + Bio4 + Bio6 + Bio7,
             family = binomial(link = "logit"), data=envtrain)
+
+
+glm3 <- glm(pa ~ Bio12 + Bio13 + Bio19 + Bio4 + Bio6 + Bio7,
+            family = binomial(link = "logit"), data=envtrain)
+
 
 
 summary(glm2)
 #### multiple group effects with multiple group effect terms factor species.
-mod_lmer1 <- lmer(pa ~ Bio12 + Bio13 + Bio14 + Bio15 + Bio19 + Bio2 + Bio6 +
-                    (1|species), data=envtrain)
+mod_lmer1 <- glmer(pa ~ Bio12 + Bio13 + Bio14 + Bio17 + Bio19 + Bio4 + Bio6 + 
+                    Bio7 + (1|genus), data=envtrain, 
+                   family = binomial)
 
 
 
@@ -253,25 +266,39 @@ mod_lmer1 <- lmer(pa ~ Bio12 + Bio13 + Bio14 + Bio15 + Bio19 + Bio2 + Bio6 +
 ge1 <- evaluate(testpres, testbackg, glm2)
 ge1
 
-ge2 <- evaluate(testpres, testbackg, mod_lmer1) ####### change by genus
+ge2 <- evaluate(testpres, testbackg, glm3) ####### change by genus
 ge2
 
-# par(mfrow=c(1,2))
-plot(ge1, 'ROC', main="ge1")
-plot(ge2, 'ROC', main="ge2")
-
-
-##mapeo del modelo
-pg <- predict(predictors, glm2, ext=predictors)
 par(mfrow=c(1,2))
+plot(ge1, 'ROC', main="GLM")
+plot(ge2, 'ROC', main="GLMM")
+dev.off() 
+
+##mapeo del modelo GLM
+pg <- predict(scale(predictors2, center=TRUE, scale=TRUE), glm2, ext=predictors2)
+par(mfrow=c(2,2))
 plot(pg, main='GLM/binomial, BD')
-plot(BD, add=TRUE, border='dark grey')
-tr <- threshold(glm2, 'spec_sens')
+plot(BD4, add=TRUE, border='dark grey')
+tr <- threshold(ge1, 'spec_sens')
 plot(pg>tr, main='presence/backgence')
-plot(BD, add=TRUE, border='dark grey')
+plot(BD4, add=TRUE, border='dark grey')
+points(pres_train, pch='+')
+# dev.off()
+
+##mapeo del modelo GLM3
+pg <- predict(scale(predictors2, center=TRUE, scale=TRUE), glm3, ext=predictors2)
+# par(mfrow=c(1,2))
+plot(pg, main='GLM/binomial, BD')
+plot(BD4, add=TRUE, border='dark grey')
+tr <- threshold(ge2, 'spec_sens')
+plot(pg>tr, main='presence/backgence')
+plot(BD4, add=TRUE, border='dark grey')
 points(pres_train, pch='+')
 
 dev.off()
+
+
+
 ```
 
 # Comentarios
