@@ -70,6 +70,8 @@ slope_aspect <- terrain(predictors$DEM30, opt = c("slope", "aspect"), unit = "de
 
 predictors <- addLayer(predictors, slope_aspect)
 
+deptos <-raster::getData ('GADM', country='COL', level=1)
+
 # names(predictors)
 # plot(predictors$Bio1)
 # plot(BD1, pch=18, add=TRUE, col="blue", main="Batrachochytrium dendrobatidis")
@@ -168,9 +170,9 @@ ausvals <- as.data.frame(extract(scale(predictors2, center=TRUE, scale=TRUE),
 
 ###### genus adding 
 presvals$genus <- positive$Genero
-# presvals$pa <-  rep(1,88)
+presvals$pa <-  rep(1,88)
 ausvals$genus  <- negative$Genero
-# ausvals$pa <-  rep(0,62)
+ausvals$pa <-  rep(0,62)
                  
 ########### Full data
 fulldat <- rbind(presvals, ausvals) #####
@@ -187,35 +189,35 @@ set.seed(2000)
 # 
 
 #generando datos de prueba y entrenamiento con los datos de presencia y pseudo-ausencia con particion 80-20%
-indexes_pres = sample(1:nrow(presvals), size=0.25*nrow(presvals))
-indexes_backg = sample(1:nrow(ausvals), size=0.25*nrow(ausvals))
+indexes_training = sample(1:nrow(fulldat), size=0.70*nrow(fulldat))
+indexes_testing = sample(1:nrow(fulldat), size=0.30*nrow(fulldat))
 
 ###Presencias
-#identifica el 20% de los datos como datos prueba/test
-pres_test = as.data.frame(presvals[indexes_pres,])
-dim(pres_test)
-#identifica el 80% de los datos como datos entrenamiento/train
-pres_train = as.data.frame(presvals[-indexes_pres,])
-dim(pres_train)
+#identifica el 80% de los datos como datos training
+training = as.data.frame(fulldat[indexes_training,])
+dim(training)
+#identifica el 20% de los datos como datos testing
+testing = as.data.frame(fulldat[-indexes_training,])
+dim(testing)
 
 # species
-# pres_train$species <- positive$Species[-indexes_pres]
-# pres_test$species <- positive$Species[indexes_pres]
-# View(pres_train)
+# testing$species <- positive$Species[-indexes_pres]
+# training$species <- positive$Species[indexes_pres]
+# View(testing)
 
 
 ###ausencia
 #identifica el 20% de los datos como datos prueba/test
-backg_test = as.data.frame(ausvals[indexes_backg,])
+backg_test = as.data.frame(ausvals[indexes_aus_test,])
 dim(backg_test)
 #identifica el 80% de los datos como datos entrenamiento/train
-backg_train = as.data.frame(ausvals[-indexes_backg,])
+backg_train = as.data.frame(ausvals[-indexes_aus_test,])
 dim(backg_train)
 
 # species
-# View(pres_train)
-backg_train$species <- negative$Species[-indexes_backg]
-backg_test$species <- negative$Species[indexes_backg]
+# View(testing)
+backg_train$species <- negative$Species[-indexes_aus_test]
+backg_test$species <- negative$Species[indexes_aus_test]
 
 
 # mapeando los datos de entrenamiento y prueba de presencias y ausvals
@@ -223,11 +225,11 @@ backg_test$species <- negative$Species[indexes_backg]
 # plot(!is.na(r), col=c('white', 'light grey'), legend=FALSE, main="datos de entrenamiento y prueba ")
 # points(backg_train, pch='-', cex=0.5, col='red')
 # points(backg_test, pch='-', cex=0.5, col='black')
-# points(pres_train, pch= '+', col='green')
-# points(pres_test, pch='+', col='blue')
+# points(testing, pch= '+', col='green')
+# points(training, pch='+', col='blue')
 # 
 
-trainpres <- as.data.frame(pres_train)# data.frame( extract(predictors2, pres_train) )
+trainpres <- as.data.frame(testing)# data.frame( extract(predictors2, testing) )
 trainbackg <- as.data.frame(backg_train)# data.frame( extract(predictors2, backg_train) )
 train <- rbind(trainpres, trainbackg)
 pb_train <- c(rep(1, nrow(trainpres)), rep(0, nrow(trainbackg)))
@@ -235,7 +237,7 @@ envtrain <- data.frame( cbind(pa=pb_train, train) )
 
 
 #### extract from stack
-testpres <- as.data.frame(pres_test)# data.frame( extract(predictors2, pres_test) )
+testpres <- as.data.frame(training)# data.frame( extract(predictors2, training) )
 testbackg <- as.data.frame(backg_test)# data.frame( extract(predictors2, backg_test) )
 
 # head(envtrain)
@@ -247,7 +249,7 @@ glm1 <- glm(pa ~ Bio12 +  Bio13 + Bio14 + Bio15 +
             Bio16 + Bio17 + Bio18 + Bio19 + Bio2 +  
             Bio3 + Bio4 + Bio6 + Bio7 + 
             DEM30 + slope + aspect,
-           family = binomial(link = "logit"), data=envtrain)
+           family = binomial(link = "logit"), data=training)
 summary(glm1)
 coef(glm1)
 
@@ -262,63 +264,78 @@ step$anova # display results
 ## now only covars from Final Model glm1
 ##########################################
 
-glm2 <- glm(pa ~ Bio12 + Bio13 + Bio14 + Bio17 + Bio19 + Bio2 + Bio6,
-            family = binomial(link = "logit"), data=envtrain)
+glm2 <- glm(pa ~ Bio12 + Bio13 + Bio14 + Bio17 + Bio19 + Bio2 + Bio4 + Bio6,
+            family = binomial(link = "logit"), data=training)
 
 
-glm3 <- glm(pa ~ Bio12 + Bio13 * Bio14 + Bio2 + Bio6,
-            family = binomial(link = "logit"), data=envtrain)
+glm3 <- glm(pa ~ Bio12 + Bio13 + Bio14 + Bio17 + Bio2 + Bio6,
+            family = binomial(link = "logit"), data=training)
 
-glm4 <- glm(pa ~ Bio12 + Bio6,
-            family = binomial(link = "logit"), data=envtrain)
+glm4 <- glm(pa ~ Bio12 + Bio13 + Bio19 + Bio2 + Bio6,
+            family = binomial(link = "logit"), data=training)
 
+glm5 <- glm(pa ~ Bio12 * Bio6 + Bio2 + Bio17,
+            family = binomial(link = "logit"), data=training)
 
+AIC(glm2, glm3, glm4, glm5)
 
 
 summary(glm2)
 #### multiple group effects with multiple group effect terms factor species.
-mod_lmer1 <- glmer(pa ~ Bio12 + Bio13 + Bio14 + Bio17 + Bio19 + Bio2 + Bio6 + (1|genus), data=envtrain, #fulldat,
+mod_lmer1 <- glmer(pa ~ Bio12 + Bio13 + Bio14 + Bio17 + Bio2 + Bio6 + (1|genus), data=training, #fulldat,
                    family = binomial(link = "logit"))
 
 ################ plot using sjPlot
 plot_model(mod_lmer1, vline.color = "gray", 
                       sort.est = TRUE)
 
-
+sjp.lmer(mod_lmer1, type = "re")
+# sjp.lmer(mod_lmer1, type = "slope")
 
 ## evaluacion
-ge1 <- evaluate(testpres, testbackg, glm2)
-ge1
-
-
-ge2 <- evaluate(testpres, testbackg, mod_lmer1, allow.new.levels = TRUE) ####### change by genus
+ge2 <- evaluate(testing[testing$pa==1,], testing[testing$pa==0,],  glm2)
 ge2
 
-par(mfrow=c(1,2))
-plot(ge1, 'ROC', main="GLM")
-plot(ge2, 'ROC', main="GLMM")
-dev.off() 
 
-##mapeo del modelo GLM
-pg <- predict(scale(predictors2, center=TRUE, scale=TRUE), glm2, ext=predictors2)
-par(mfrow=c(2,2))
-plot(pg, main='GLM/binomial, BD')
-plot(BD4, add=TRUE, border='dark grey')
-tr <- threshold(ge1, 'spec_sens')
-plot(pg>tr, main='presence/backgence')
-plot(BD4, add=TRUE, border='dark grey')
-points(pres_train, pch='+')
+ge_lmer <- evaluate(testing[testing$pa==1,], testing[testing$pa==0,], mod_lmer1, allow.new.levels = TRUE) ####### change by genus
+ge_lmer
+
+ge3 <- evaluate(testing[testing$pa==1,], testing[testing$pa==0,],  glm3, allow.new.levels = TRUE) ####### change by genus
+ge3
+
+par(mfrow=c(1,3))
+plot(ge2, 'ROC', main="GLM")
+plot(ge_lmer, 'ROC', main="GLMM")
+plot(ge3, 'ROC', main="GLMM")
+# dev.off() 
+
+
+
+
+
+
+##mapeo del modelo GLM3
+pg3 <- predict(scale(predictors2, center=TRUE, scale=TRUE), glm3, ext=predictors2)
+par(mfrow=c(1,2))
+plot(pg3, main='GLM3/binomial, BD')
+plot(BD4, add=TRUE, col='grey50')
+plot(deptos, add=TRUE, border='white')
+tr <- threshold(ge3, 'spec_sens')
+plot(pg3>tr, main='presence/absence')
+plot(BD4, add=TRUE, col='grey50')
+plot(deptos, add=TRUE, border='white')
+# points(testing, pch='+')
 # dev.off()
 
 ##mapeo del modelo GLM3
-pg <- predict(scale(predictors2, center=TRUE, scale=TRUE), glm3, ext=predictors2)
+pg_lmer <- predict(scale(predictors2, center=TRUE, scale=TRUE), mod_lmer1, ext=predictors2)
 # par(mfrow=c(1,2))
-plot(pg, main='GLM/binomial, BD')
+plot(pg_lmer, main='GLM/binomial, BD')
 plot(BD4, add=TRUE, border='dark grey')
-tr <- threshold(ge2, 'spec_sens')
+tr <- threshold(ge_lmer, 'spec_sens')
 plot(pg>tr, main='presence/backgence')
 plot(BD4, add=TRUE, border='dark grey')
-points(pres_train, pch='+')
+points(testing, pch='+')
 
 dev.off()
 
