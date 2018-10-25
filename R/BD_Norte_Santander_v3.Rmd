@@ -17,10 +17,10 @@ editor_options:
 ---
 
 
-1. correr sin estandarizar
-2. hacer mapa por especie
-3. evaluacion del modelo verificar cual es si glm1 o 2
-4. eliminar bio 12.
+
+2. hacer mapa por especie 
+
+
 
 
 # BD 
@@ -47,6 +47,9 @@ library(sjPlot)
 library(mgcv) # GAM
 library(MuMIn) # model average
 library(mgcv) # visual GAM
+library(ggeffects) # to predict models
+
+
 ```
 
 
@@ -345,6 +348,8 @@ mod_lmer4 <- glmer(pa ~ Bio16 : Bio2 * (1|genus), data=training, #fulldat,
 
 summary(mod_lmer1)
 summary(mod_lmer2)
+summary(mod_lmer3)
+summary(mod_lmer4) 
 
 AICc(mod_lmer1, mod_lmer2, mod_lmer3, mod_lmer4)
 
@@ -359,21 +364,25 @@ AICc(mod_lmer1, mod_lmer2, mod_lmer3, mod_lmer4)
 
 #### G A M   Models 
 #### 
-gam1 <-  gam (pa ~ s(Bio12) + s(Bio13) + s(Bio14) + 
-                s(Bio17) + s(Bio2) + s(Bio6) ,
+gam1 <-  gam (pa ~ s(Bio13) + s(Bio16) + s(Bio19) + 
+                s(Bio2) + s(Bio4) + DEM30,
               family = binomial(link = "logit"), data=training)
 
-gam2 <-  gam (pa ~ te(Bio13, Bio14) + 
-                s(Bio17) + te(Bio2, Bio6) ,
+gam2 <-  gam (pa ~ te(Bio13, Bio16) + 
+                s(Bio19) + te(Bio2, Bio4) ,
               family = binomial(link = "logit"), method="REML",
               select=TRUE, data=training)
 
-gam3 <-  gam (pa ~ Bio13 + Bio14 + 
-                 Bio2 + Bio6 + s(DEM30) ,
+gam3 <-  gam (pa ~ Bio13 + Bio16 + 
+                 Bio19 + Bio2 + Bio4 + s(DEM30),
               family = binomial, data=training)
 
-gam4 <-  gam (pa ~ s(DEM30) + te(Bio12, Bio2),
+gam4 <-  gam (pa ~ s(DEM30) + te(Bio16, Bio2),
               family = binomial, data=training)
+
+
+
+AICc(gam1, gam2, gam3, gam4)
 
 #vis.gam(gam1, view=c("Bio6", "Bio13"), type="response")  
 gam.ME <-  gamm(pa ~ s(Bio13) + s(Bio16) + s(Bio19) + 
@@ -387,12 +396,18 @@ gam.ME <-  gamm(pa ~ s(Bio13) + s(Bio16) + s(Bio19) +
 #                     sort.est = TRUE)
 
 plot_model(mod_lmer1, type = "re", sort.est = TRUE) #plots conditionals of random effects
+
 plot_model(mod_lmer1, type = "est", #fixed effects
          show.ci = TRUE, sort.est = TRUE)
 
 
-plot_model(mod_lmer1,  #fixed effects
-         show.se = TRUE)
+
+dat <-ggpredict(mod_lmer1, c( "DEM30", "Bio16","genus") )
+ggplot(dat, aes(x = x, y = predicted, colour = group)) +
+    stat_smooth( se = FALSE, fullrange = TRUE) +
+    facet_wrap(~facet)
+
+ggpredict(mod_lmer1, terms = c("genus", "DEM30"))
 
 # Probabilities of fixed effects depending on grouping level (random intercept)
 plot_model(mod_lmer1, type = "ri.pc",
@@ -430,7 +445,7 @@ par(mfrow=c(1,2))
 plot(pg3, main='GLM2/binomial, BD')
 plot(BD4, add=TRUE, col='grey50')
 plot(deptos, add=TRUE, border='white')
-tr <- threshold(ge3, 'spec_sens')
+tr <- threshold(ge2, 'spec_sens')
 plot(pg3>tr, main='presence/absence')
 plot(BD4, add=TRUE, col='grey50')
 plot(deptos, add=TRUE, border='white')
