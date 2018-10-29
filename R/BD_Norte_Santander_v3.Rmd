@@ -41,7 +41,7 @@ library(corrgram)
 library (corrplot) # correlations
 library(lme4)
 library(nlme)
-# library(arm)
+library(ggplot2)
 library(sjPlot)
 
 library(mgcv) # GAM
@@ -339,11 +339,13 @@ mod_lmer1 <- glmer(pa ~ Bio13 + Bio16 + Bio19 + Bio2 + Bio4 + DEM30 + (1|genus),
 mod_lmer2 <- glmer(pa ~  I(Bio13^2) : I(Bio16^2) + I(Bio19^2) + I(Bio2^2) + (1|genus), data=training, #fulldat,
                    family = binomial(link = "logit"))
 
-mod_lmer3 <- glmer(pa ~ Bio16 +  Bio2 + (1|genus), data=training, #fulldat,
+mod_lmer3 <- glmer(pa ~ Bio16 +  DEM30 + (Bio2|genus), data=training, #fulldat,
                    family = binomial(link = "logit"))
 
+mod_lmer4 <- glmer(pa ~ DEM30 + Bio2 + (Bio16|genus), data=training, #fulldat,
+                   family = binomial(link = "logit"))
 
-mod_lmer4 <- glmer(pa ~ Bio16 : Bio2 * (1|genus), data=training, #fulldat,
+mod_lmer5 <- glmer(pa ~ Bio16 : Bio2 * (1|genus), data=training, #fulldat,
                    family = binomial(link = "logit"))
 
 summary(mod_lmer1)
@@ -351,7 +353,7 @@ summary(mod_lmer2)
 summary(mod_lmer3)
 summary(mod_lmer4) 
 
-AICc(mod_lmer1, mod_lmer2, mod_lmer3, mod_lmer4)
+AICc(mod_lmer1, mod_lmer2, mod_lmer3, mod_lmer4,mod_lmer5 )
 
 ```
 
@@ -363,32 +365,32 @@ AICc(mod_lmer1, mod_lmer2, mod_lmer3, mod_lmer4)
 
 
 #### G A M   Models 
-#### 
-gam1 <-  gam (pa ~ s(Bio13) + s(Bio16) + s(Bio19) + 
-                s(Bio2) + s(Bio4) + DEM30,
-              family = binomial(link = "logit"), data=training)
-
-gam2 <-  gam (pa ~ te(Bio13, Bio16) + 
-                s(Bio19) + te(Bio2, Bio4) ,
-              family = binomial(link = "logit"), method="REML",
-              select=TRUE, data=training)
-
-gam3 <-  gam (pa ~ Bio13 + Bio16 + 
-                 Bio19 + Bio2 + Bio4 + s(DEM30),
-              family = binomial, data=training)
-
-gam4 <-  gam (pa ~ s(DEM30) + te(Bio16, Bio2),
-              family = binomial, data=training)
-
-
-
-AICc(gam1, gam2, gam3, gam4)
-
-#vis.gam(gam1, view=c("Bio6", "Bio13"), type="response")  
-gam.ME <-  gamm(pa ~ s(Bio13) + s(Bio16) + s(Bio19) + 
-                s(Bio2) + s(Bio4) + s(DEM30) , method="REML",
-              family = binomial(link = "logit"), data=training )#, random=list(genus=~1))  
-
+# #### 
+# gam1 <-  gam (pa ~ s(Bio13) + s(Bio16) + s(Bio19) + 
+#                 s(Bio2) + s(Bio4) + DEM30,
+#               family = binomial(link = "logit"), data=training)
+# 
+# gam2 <-  gam (pa ~ te(Bio13, Bio16) + 
+#                 s(Bio19) + te(Bio2, Bio4) ,
+#               family = binomial(link = "logit"), method="REML",
+#               select=TRUE, data=training)
+# 
+# gam3 <-  gam (pa ~ Bio13 + Bio16 + 
+#                  Bio19 + Bio2 + Bio4 + s(DEM30),
+#               family = binomial, data=training)
+# 
+# gam4 <-  gam (pa ~ s(DEM30) + te(Bio16, Bio2),
+#               family = binomial, data=training)
+# 
+# 
+# 
+# AICc(gam1, gam2, gam3, gam4)
+# 
+# #vis.gam(gam1, view=c("Bio6", "Bio13"), type="response")  
+# gam.ME <-  gamm(pa ~ s(Bio13) + s(Bio16) + s(Bio19) + 
+#                 s(Bio2) + s(Bio4) + s(DEM30) , method="REML",
+#               family = binomial(link = "logit"), data=training )#, random=list(genus=~1))  
+# 
 
 
 ################ plot using sjPlot
@@ -410,8 +412,8 @@ ggplot(dat, aes(x = x, y = predicted, colour = group)) +
 ggpredict(mod_lmer1, terms = c("genus", "DEM30"))
 
 # Probabilities of fixed effects depending on grouping level (random intercept)
-plot_model(mod_lmer1, type = "ri.pc",
-          show.se = TRUE)
+# plot_model(mod_lmer1, type = "ri.pc",
+#           show.se = TRUE)
 
 # sjp.lmer(mod_lmer1, type = "fe", 
 #        show.ci = TRUE, sort.est = TRUE)
@@ -437,12 +439,10 @@ plot(ge3, 'ROC', main="GLMM")
 
 
 
-
-
 ##mapeo del modelo GLM2
 pg3 <- predict(scale(predictors2, center=TRUE, scale=TRUE), glm2, ext=predictors2)
 par(mfrow=c(1,2))
-plot(pg3, main='GLM2/binomial, BD')
+plot(pg3, main='GLM2/Binomial, BD')
 plot(BD4, add=TRUE, col='grey50')
 plot(deptos, add=TRUE, border='white')
 tr <- threshold(ge2, 'spec_sens')
